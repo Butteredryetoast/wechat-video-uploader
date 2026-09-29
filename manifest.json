@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "公众号视频批量上传助手",
+  "version": "0.4.6",
+  "description": "公众号视频批量上传与文章排版：粘贴原文，整理小标题和中英文空格，预览后插入正文。",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "offscreen"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "打开视频上传面板并显示文章排版入口"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "host_permissions": [
+    "https://mp.weixin.qq.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mp.weixin.qq.com/cgi-bin/appmsg*"
+      ],
+      "js": [
+        "src/render-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://mp.weixin.qq.com/*"
+      ],
+      "js": [
+        "src/article-format.js",
+        "src/article-editor.js",
+        "src/article-panel.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

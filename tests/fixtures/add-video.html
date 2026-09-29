@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>本地添加视频模拟页</title></head>
+<body>
+  <header><img src="avatar.png" alt="账号头像"></header>
+  <main>
+    <h1>添加视频</h1>
+    <form>
+      <section id="upload-row">
+        <label>上传视频</label>
+        <div>
+          <p>请上传时长小于1小时的视频，支持主流的视频格式，超出限制的视频请到腾讯视频上传</p>
+          <button type="button" id="upload-button">上传视频</button>
+          <input type="file" accept="video/*,.mp4,.mov" id="video-file" style="display:none">
+          <div id="upload-state"></div>
+        </div>
+      </section>
+      <section id="cover-row"><label>封面</label><div id="cover"><p>视频上传完成后可设置封面图</p></div></section>
+      <section>
+        <label for="video-title">标题</label>
+        <input type="text" id="video-title" maxlength="64">
+        <span>0/64</span>
+        <p>此标题为素材标题，后续群发时可设置新标题，保存后不可修改。建议填写清晰、准确的标题</p>
+      </section>
+      <section><label>原创声明 <input id="original" type="checkbox" role="switch"></label></section>
+      <section><label><input id="danmaku" type="checkbox" checked>弹幕 › 所有用户</label></section>
+      <p>不得上传未经授权的他人作品，以及色情、反动等违法视频。</p>
+      <p>上传后视频将进行转码和审核，查看视频处理流程</p>
+      <footer>
+        <label><input id="agreement" type="checkbox">我已阅读并同意<a href="#rules">《公众平台视频上传服务规则》</a></label>
+        <button type="button" id="save" disabled>保存</button>
+        <button type="button" id="preview" disabled>预览</button>
+        <button type="button" id="publish" disabled>保存并发表</button>
+      </footer>
+    </form>
+  </main>
+</body></html>
