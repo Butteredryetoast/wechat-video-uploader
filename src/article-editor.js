@@ -160,7 +160,7 @@
     // Diagnostics use fixed route vocabulary only. Unknown query/path values
     // might themselves contain private text and must never be copied out.
     const known = (value, allowed) => allowed.includes(value) ? value : null;
-    const result = { version: '0.4.6', code: 'NOT_ARTICLE', route: {
+    const result = { version: '0.4.7', code: 'NOT_ARTICLE', route: {
       pathname: known(context.route.pathname, ['/cgi-bin/appmsg', '/cgi-bin/home', '/cgi-bin/filepage', '/cgi-bin/loginpage']),
       template: known(context.route.template, ['media/appmsg_edit', 'media/appmsg_edit_v2', 'media/videomsg_edit']),
       action: known(context.route.action, ['', 'edit', 'video_edit', 'publish'])

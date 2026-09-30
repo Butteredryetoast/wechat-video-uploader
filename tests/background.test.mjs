@@ -10,8 +10,8 @@ const EXTENSION_ID = 'test-extension-id';
 const EXTENSION_URL = `chrome-extension://${EXTENSION_ID}/`;
 const CONTEXT_KEY = 'wxvu.inline.context.v3';
 const WORKERS_KEY = 'wxvu.workers.v1';
-const UPLOAD_SCRIPTS = ['src/panel.js', 'src/sidebar.js'];
-const ARTICLE_SCRIPTS = ['src/article-format.js', 'src/article-editor.js', 'src/article-panel.js'];
+const UPLOAD_SCRIPTS = ['src/launcher.js', 'src/panel.js', 'src/sidebar.js'];
+const ARTICLE_SCRIPTS = ['src/launcher.js', 'src/article-format.js', 'src/article-editor.js', 'src/article-panel.js'];
 const injectsFiles = (call, files) => call.kind === 'inject' && JSON.stringify(call.args.files) === JSON.stringify(files);
 const uploadInjection = call => injectsFiles(call, UPLOAD_SCRIPTS);
 const articleInjection = call => injectsFiles(call, ARTICLE_SCRIPTS);
@@ -79,7 +79,7 @@ async function harness({ session = {}, tabs = [{ id: 7, url: ADD_URL, status: 'c
       async query() { return [...tabMap.values()].map((tab) => ({ ...tab })); },
     },
   };
-  const context = vm.createContext({ chrome, URL, console, crypto: webcrypto, setTimeout, clearTimeout, structuredClone });
+  const context = vm.createContext({ chrome, URL, URLSearchParams, console, crypto: webcrypto, setTimeout, clearTimeout, structuredClone });
   const source = await fs.readFile(new URL('../src/background.js', import.meta.url), 'utf8');
   vm.runInContext(source, context, { filename: 'background.js' });
   async function message(payload, sender) {
@@ -98,6 +98,7 @@ async function harness({ session = {}, tabs = [{ id: 7, url: ADD_URL, status: 'c
 
 const ownerSender = (tabId = 7, url = ADD_URL) => ({ id: EXTENSION_ID, tab: { id: tabId, url }, url, frameId: 0 });
 const hostSender = () => ({ id: EXTENSION_ID, url: EXTENSION_URL + 'offscreen.html' });
+const launcherMessage = (command = 'openVideo') => ({ namespace: 'wxvu.launcher', command });
 const uiMessage = (command, payload = {}) => ({ namespace: 'wxvu.ui', command, payload });
 const hostMessage = (command, payload = {}) => ({ namespace: 'wxvu.host', command, payload });
 const owner = { targetTabId: 7, sessionId: 'existing-session' };
@@ -117,6 +118,74 @@ test('toolbar starts one offscreen Blob engine and injects an inline sidebar wit
   assert.deepEqual(h.calls.find(uploadInjection).args, { target: { tabId: 7 }, files: UPLOAD_SCRIPTS });
   assert(h.calls.findIndex((call) => call.kind === 'engine') < h.calls.findIndex(uploadInjection));
   assert(!h.calls.some((call) => call.kind === 'tabs.create'));
+});
+
+test('floating launcher opens the video panel and explicitly shows a previously collapsed sidebar', async () => {
+  const h = await harness();
+  assert.deepEqual(await h.message(launcherMessage(), ownerSender()), {ok:true,result:{opened:true}});
+  const owner = structuredClone(h.sessionData[CONTEXT_KEY]);
+  assert.equal(owner.targetTabId,7);
+  const show = call => call.kind === 'page' && call.message.namespace === 'wxvu.sidebar' && call.message.command === 'show';
+  assert.deepEqual(h.calls.find(show), {kind:'page',id:7,message:{namespace:'wxvu.sidebar',command:'show'}});
+  assert(h.calls.findIndex(uploadInjection) < h.calls.findIndex(show));
+  assert(h.calls.findIndex(articleInjection) < h.calls.findIndex(uploadInjection));
+  assert.deepEqual(await h.message(launcherMessage(), ownerSender()), {ok:true,result:{opened:true}});
+  assert.deepEqual(h.sessionData[CONTEXT_KEY],owner);
+  assert.equal(h.calls.filter(show).length,2);
+  assert.equal(h.calls.filter(call=>call.kind==='offscreen.create').length,1);
+  assert(!h.calls.some(call=>['tabs.create','tabs.update','tabs.remove','offscreen.close','local.set'].includes(call.kind)));
+});
+
+test('floating launcher messages reject foreign senders, subframes, invalid commands, and extension documents', async () => {
+  const h = await harness();
+  for(const sender of [
+    {...ownerSender(),id:'unrelated-extension'},
+    ownerSender(7,'https://mp.weixin.qq.com.evil.test/'),
+    {...ownerSender(),frameId:1},
+    {...ownerSender(),frameId:undefined},
+    hostSender(),
+  ]) assert.equal(await h.message(launcherMessage(),sender),undefined);
+  for(const command of ['start','save','inject','publish','openArticle',undefined]) {
+    const result = await h.message({namespace:'wxvu.launcher',command},ownerSender());
+    assert.equal(result.ok,false);
+    assert.match(result.error,/未知的悬浮球操作/);
+  }
+  assert.equal(h.calls.length,0);
+});
+
+test('floating launcher rechecks actual tab URLs and refuses queue worker pages before injection', async () => {
+  const workerUrl = `${ADD_URL}#wxvu-worker=12345678-1234-1234-1234-123456789abc`;
+  for(const [actualUrl,senderUrl] of [
+    ['https://example.com/',ADD_URL],
+    ['https://mp.weixin.qq.com.evil.test/',ADD_URL],
+    [workerUrl,ADD_URL],
+    [ADD_URL,workerUrl],
+    [workerUrl,workerUrl],
+  ]) {
+    const h = await harness({tabs:[{id:7,url:actualUrl}]});
+    assert.equal((await h.message(launcherMessage(),ownerSender(7,senderUrl))).ok,false);
+    assert.equal(h.sessionData[CONTEXT_KEY],undefined);
+    assert(!h.calls.some(call=>['inject','engine','session.set','offscreen.create','tabs.create','tabs.update'].includes(call.kind)));
+  }
+  const closed = await harness({tabs:[]});
+  assert.equal((await closed.message(launcherMessage(),ownerSender())).ok,false);
+  assert.equal(closed.sessionData[CONTEXT_KEY],undefined);
+});
+
+test('simultaneous floating launcher requests preserve single queue ownership', async () => {
+  const h = await harness({tabs:[{id:7,url:ADD_URL},{id:8,url:ADD_URL}]});
+  const results = await Promise.all([
+    h.message(launcherMessage(),ownerSender(7)),
+    h.message(launcherMessage(),ownerSender(8)),
+  ]);
+  assert.equal(results[0].ok,true);
+  assert.equal(results[1].ok,false);
+  assert.match(results[1].error,/另一个公众号页面已绑定上传队列/);
+  assert.equal(h.sessionData[CONTEXT_KEY].targetTabId,7);
+  assert.equal(h.calls.filter(call=>call.kind==='offscreen.create').length,1);
+  assert.equal(h.calls.filter(call=>call.kind==='engine').length,1);
+  assert.deepEqual(h.calls.filter(uploadInjection).map(call=>call.args.target.tabId),[7]);
+  assert(!h.calls.some(call=>['tabs.create','tabs.update','tabs.remove','offscreen.close','local.set'].includes(call.kind)));
 });
 
 test('reopening the sidebar preserves its owner, session, and existing offscreen document', async () => {
@@ -294,6 +363,7 @@ test('owner navigation completion reconnects the existing session and reinjects 
   assert.deepEqual(h.sessionData[CONTEXT_KEY], owner);
   assert.deepEqual(h.calls.find(uploadInjection).args, { target: { tabId: 7 }, files: UPLOAD_SCRIPTS });
   assert(!h.calls.some((call) => ['offscreen.create', 'offscreen.close', 'session.set', 'tabs.create'].includes(call.kind)));
+  assert(!h.calls.some(call=>call.kind==='page' && call.message.command==='show'),'automatic restoration must respect the collapsed panel state');
 });
 
 test('closing the owner disposes its Blob host and context while unrelated tab closure has no effect', async () => {

@@ -851,7 +851,7 @@ test('diagnostics contain only fixed route vocabulary and numeric document count
     `<iframe src="about:blank" title="${secret}"></iframe>`, ARTICLE_V2 + `&token=${secret}&appmsgid=${secret}#${secret}`);
   h.doc.cookie = `private_cookie=${secret}`;
   const diagnostic = plain(h.api.diagnose());
-  assert.equal(diagnostic.version, '0.4.6');
+  assert.equal(diagnostic.version, '0.4.7');
   assert.equal(diagnostic.code, 'READY');
   assert.deepEqual(diagnostic.route, {pathname:'/cgi-bin/appmsg',template:'media/appmsg_edit_v2',action:'edit'});
   assert(!JSON.stringify(diagnostic).includes(secret));

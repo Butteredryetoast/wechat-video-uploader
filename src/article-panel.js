@@ -24,9 +24,9 @@
       footer{border-top:1px solid #e2ebe6;padding:14px 24px;background:#fafcfb;flex-shrink:0}.destination{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.destination label{margin:0;font-size:13px;font-weight:400}.destination select{background:white;border:1px solid #d1e3d7;border-radius:6px;padding:6px;color:#355845}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:11px}.actions .primary{flex:1}.editor-state{font-size:12px;color:#7e9385;margin-top:7px}.editor-state.unavailable{color:#a0652b}footer .status{margin:8px 0 0;max-height:105px;overflow:auto}details{font-size:12px;color:#887b5e;margin-top:8px}details ul{margin:4px 0;padding-left:19px}.danger-note{color:#9b702e;font-size:12px;margin-top:5px}
       @media(max-width:600px){:host{left:8px;bottom:8px}.panel{width:calc(100vw - 16px);height:calc(100vh - 16px)}.body,footer,header{padding:14px}.block{grid-template-columns:58px minmax(0,1fr);padding:5px}.preview{padding:7px}}
     </style>
-    <button class="launcher" type="button" title="文章排版 v0.4.6">✦ 文章排版</button>
+    <button class="launcher" type="button" title="文章排版 v0.4.7">✦ 文章排版</button>
     <section class="panel" role="dialog" aria-label="文章排版" hidden>
-      <header><div><h2>文章排版</h2><p>v0.4.6 · 粘贴原文 · 整理预览 · 插入正文</p></div><button class="close" type="button" aria-label="收起文章排版">−</button></header>
+      <header><div><h2>文章排版</h2><p>v0.4.7 · 粘贴原文 · 整理预览 · 插入正文</p></div><button class="close" type="button" aria-label="收起文章排版">−</button></header>
       <div class="body">
         <label for="article-paste">从飞书或腾讯文档复制后，粘贴到这里</label>
         <textarea id="article-paste" class="paste" placeholder="在这里按 ⌘V / Ctrl+V 粘贴整篇文章。原文的标题和图片信息会一起读取。"></textarea>
@@ -55,6 +55,7 @@
       font:'14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif',color:'#234337'}))
       host.style.setProperty(key,value,'important');
     if (!host.isConnected) document.documentElement.append(host);
+    if (globalThis.WXToolLauncher) shadow.querySelector('.launcher').hidden = true;
   }
   mount();
   const $ = selector => shadow.querySelector(selector);
@@ -104,8 +105,8 @@
       return {ready:false};
     }
   }
-  function show() { mount(); $('.launcher').textContent = '✦ 文章排版'; $('.panel').hidden = false; $('.launcher').hidden = true; checkEditor(); $('#article-paste').focus(); }
-  function hide() { $('.panel').hidden = true; $('.launcher').hidden = false; }
+  function show() { mount(); globalThis.WXToolLauncher?.activate('article'); $('.launcher').textContent = '✦ 文章排版'; $('.panel').hidden = false; $('.launcher').hidden = true; checkEditor(); $('#article-paste').focus(); }
+  function hide() { $('.panel').hidden = true; $('.launcher').hidden = Boolean(globalThis.WXToolLauncher); globalThis.WXToolLauncher?.collapsed('article'); }
   function updatePreview() {
     state.result = state.blocks.length ? format.render(state.blocks,{orange:$('.color').value}) : null;
     const preview = $('.preview');
@@ -302,5 +303,6 @@
   // action once that editor is ready instead of leaving a stale disabled state.
   setInterval(()=>{ if(!$('.panel').hidden && !state.busy) checkEditor(); },2500);
   globalThis.WXArticlePanel = Object.freeze({show,hide,mount});
+  globalThis.WXToolLauncher?.register('article',{show,hide});
   controls();
 })();

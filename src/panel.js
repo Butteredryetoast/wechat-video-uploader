@@ -24,7 +24,7 @@
     button:disabled { cursor: not-allowed; }
     button,input,textarea,select,a { -webkit-tap-highlight-color: transparent; }
     button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible { outline: 3px solid #89dcb4; outline-offset: 3px; }
-    .panel { position: fixed; z-index: 2147483647; right: 20px; top: 20px; bottom: 20px; width: min(400px,calc(100vw - 24px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d7e7df; border-radius: 22px; background: #f5f8f6; box-shadow: 0 18px 70px #14332530,0 2px 12px #14332510; }
+    .panel { position: fixed; z-index: 2147483601; right: 20px; top: 20px; bottom: 20px; width: min(400px,calc(100vw - 24px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d7e7df; border-radius: 22px; background: #f5f8f6; box-shadow: 0 18px 70px #14332530,0 2px 12px #14332510; }
     .header { flex-shrink: 0; padding: 22px 22px 17px; background: #fff; border-bottom: 1px solid #e4ece7; }
     .header-top { display: flex; align-items: center; gap: 10px; }
     .brand { display: grid; place-items: center; width: 39px; height: 39px; flex-shrink: 0; color: #fff; background: #07a85e; border-radius: 12px; }
@@ -538,6 +538,7 @@
         if (atPosition !== row.root) list.insertBefore(row.root, atPosition || null);
       });
       queueCount.textContent = String(items.length);
+      call('onSummary', { running: Boolean(snapshot.running), done: counts.done, total: items.length, problem: counts.problem });
       empty.hidden = items.length > 0;
       Object.keys(statValues).forEach(key => { statValues[key].textContent = String(counts[key]); });
       readiness.classList.toggle('ready', Boolean(snapshot.running || runtimeInfo.ready));
@@ -594,7 +595,7 @@
       if (destroyed) return;
       if (fullPage) return;
       panel.hidden = true;
-      floating.hidden = false;
+      floating.hidden = Boolean(options.unifiedLauncher);
       floating.setAttribute('aria-expanded', 'false');
       call('onCollapse', true);
     }

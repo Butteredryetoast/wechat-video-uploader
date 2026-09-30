@@ -415,7 +415,7 @@
       }
       const workers = Array.from(this._workerProgress.values(), record => ({ ...record,
         active: this._workers.get(record.itemId) === record.tabId }));
-      return { version: '0.4.6', createdAt: new Date().toISOString(), queue: this.queue.snapshot(), events: this.log.slice(),
+      return { version: '0.4.7', createdAt: new Date().toISOString(), queue: this.queue.snapshot(), events: this.log.slice(),
         diagnostics: { ...diagnostics, workers } };
     }
 

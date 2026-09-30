@@ -18,6 +18,13 @@ function boundedClosedWorkers(items) {
   return items.filter(item=>item.state!=='closed' || closed.has(item));
 }
 function isWeChat(url) { try { return new URL(url).origin === ORIGIN; } catch { return false; } }
+function isWorkerUrl(value) {
+  try {
+    const marker = new URLSearchParams(new URL(value).hash.slice(1));
+    return marker.getAll('wxvu-worker').length === 1 &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(marker.get('wxvu-worker') || '');
+  } catch { return false; }
+}
 function isUploadUrl(value) {
   try {
     const url = new URL(value);
@@ -82,12 +89,12 @@ async function ownedTab(tabId, allowWorker = false) {
 }
 async function injectSidebar(tabId) {
   await ownedTab(tabId);
-  await chrome.scripting.executeScript({target:{tabId},files:['src/panel.js','src/sidebar.js']});
+  await chrome.scripting.executeScript({target:{tabId},files:['src/launcher.js','src/panel.js','src/sidebar.js']});
 }
 async function injectArticleEntry(tabId) {
   // This entry is independent of the video queue owner. Re-injection restores
   // the launcher on pages that were already open when the extension reloaded.
-  await chrome.scripting.executeScript({target:{tabId},files:['src/article-format.js','src/article-editor.js','src/article-panel.js']});
+  await chrome.scripting.executeScript({target:{tabId},files:['src/launcher.js','src/article-format.js','src/article-editor.js','src/article-panel.js']});
 }
 async function disposeOwner() {
   await serializeWorkers(async()=>{
@@ -195,28 +202,33 @@ async function renderWorker({itemId,tabId}) {
   return renderInPage(tabId);
 }
 
+async function openVideoPanel(tab) {
+  if(!tab.id || !isWeChat(tab.url)) throw new Error('请先打开公众号的“选择视频”或视频素材库页面，再点击本扩展。');
+  try { await injectArticleEntry(tab.id); } catch { /* Article UI must not interrupt an existing video workflow. */ }
+  let owner = await context();
+  if(owner && owner.targetTabId !== tab.id) {
+    let old;
+    try { old = await chrome.tabs.get(owner.targetTabId); } catch {}
+    if(old && isWeChat(old.url)) throw new Error('另一个公众号页面已绑定上传队列，请先关闭那个页面，再在这里打开。');
+    await disposeOwner();
+    owner = null;
+  }
+  if(!owner) {
+    owner = {targetTabId:tab.id,sessionId:crypto.randomUUID()};
+    await chrome.storage.session.set({[CONTEXT_KEY]:owner});
+  }
+  await ensureOffscreen();
+  await engine('init',owner);
+  await injectSidebar(tab.id);
+  // An explicit open must restore a panel even if it was previously collapsed.
+  await chrome.tabs.sendMessage(tab.id,{namespace:'wxvu.sidebar',command:'show'});
+  await chrome.action.setBadgeText({tabId:tab.id,text:''});
+  await chrome.action.setTitle({tabId:tab.id,title:'打开页面内的视频批量上传面板'});
+  return {opened:true};
+}
+
 chrome.action.onClicked.addListener(tab => {
-  serialize(async()=>{
-    if(!tab.id || !isWeChat(tab.url)) throw new Error('请先打开公众号的“选择视频”或视频素材库页面，再点击本扩展。');
-    try { await injectArticleEntry(tab.id); } catch { /* Article UI must not interrupt an existing video workflow. */ }
-    let owner = await context();
-    if(owner && owner.targetTabId !== tab.id) {
-      let old;
-      try { old = await chrome.tabs.get(owner.targetTabId); } catch {}
-      if(old && isWeChat(old.url)) throw new Error('另一个公众号页面已绑定上传队列，请先关闭那个页面，再在这里打开。');
-      await disposeOwner();
-      owner = null;
-    }
-    if(!owner) {
-      owner = {targetTabId:tab.id,sessionId:crypto.randomUUID()};
-      await chrome.storage.session.set({[CONTEXT_KEY]:owner});
-    }
-    await ensureOffscreen();
-    await engine('init',owner);
-    await injectSidebar(tab.id);
-    await chrome.action.setBadgeText({tabId:tab.id,text:''});
-    await chrome.action.setTitle({tabId:tab.id,title:'打开页面内的视频批量上传面板'});
-  }).catch(async error=>{
+  serialize(()=>openVideoPanel(tab)).catch(async error=>{
     if(tab.id) {
       try {
         await chrome.action.setBadgeBackgroundColor({tabId:tab.id,color:'#b54708'});
@@ -226,6 +238,16 @@ chrome.action.onClicked.addListener(tab => {
     }
   });
 });
+
+async function handleLauncher(message,sender) {
+  if(message.command !== 'openVideo') throw new Error('未知的悬浮球操作。');
+  // Sender metadata can be stale after navigation. Recheck the current tab
+  // before creating a queue owner or injecting any script.
+  const tab = await chrome.tabs.get(sender.tab.id);
+  if(!isWeChat(tab.url) || isWorkerUrl(tab.url) || isWorkerUrl(sender.url))
+    throw new Error('请在公众号任务入口打开视频上传面板。');
+  return openVideoPanel(tab);
+}
 
 async function handleUI(message,sender) {
   if(!sender.tab?.id || sender.frameId !== 0 || !isWeChat(sender.url)) throw new Error('页面来源无效。');
@@ -289,7 +311,10 @@ async function handleHost(command,payload={}) {
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(sender.id !== chrome.runtime.id) return false;
   let task;
-  if(message?.namespace === 'wxvu.ui') {
+  if(message?.namespace === 'wxvu.launcher') {
+    if(!sender.tab?.id || sender.frameId !== 0 || !isWeChat(sender.url)) return false;
+    task = serialize(()=>handleLauncher(message,sender));
+  } else if(message?.namespace === 'wxvu.ui') {
     if(!sender.tab?.id || sender.frameId !== 0 || !isWeChat(sender.url)) return false;
     // Keep owner replacement/closure behind already accepted UI operations.
     // Host RPC stays independent so engine initialization cannot deadlock.

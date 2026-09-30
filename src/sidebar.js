@@ -193,10 +193,14 @@
 
   function saveCollapsed(collapsed) {
     try { sessionStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0'); } catch { /* Optional UI preference only. */ }
+    if (collapsed) globalThis.WXToolLauncher?.collapsed('video');
+    else globalThis.WXToolLauncher?.activate('video');
   }
 
   const panel = WXVideoPanel.create({
     fullPage: false,
+    unifiedLauncher: Boolean(globalThis.WXToolLauncher),
+    onSummary: summary => globalThis.WXToolLauncher?.updateVideo(summary),
     onFiles: addFiles,
     onUpdate: updateItem,
     onRemove: id => action('remove', { id }),
@@ -235,7 +239,9 @@
     chrome.runtime.onMessage.addListener(listener);
     refresh().catch(report);
   });
-  globalThis.WXVideoSidebar = { show: () => panel.show() };
+  globalThis.WXVideoSidebar = { show: () => panel.show(), hide: () => panel.hide() };
+  globalThis.WXToolLauncher?.register('video',globalThis.WXVideoSidebar);
+  globalThis.WXToolLauncher?.activate('video');
   try { if (sessionStorage.getItem(COLLAPSED_KEY) === '1') panel.hide(); } catch { /* Optional preference only. */ }
   render();
   refresh().catch(report).finally(() => { loading = false; render(); });
